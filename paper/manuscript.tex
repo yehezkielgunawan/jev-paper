@@ -1,0 +1,154 @@
+% Blinded review manuscript. Compile from paper/ with latexmk -pdf manuscript.tex.
+% Numerical results: ../results/metrics/; data audit: ../results/audit/.
+\documentclass{llncs}
+\usepackage{graphicx}
+\begin{document}
+
+\title{Leakage-Aware Transaction Risk Classification with Jev and Tree Ensembles}
+\titlerunning{Leakage-Aware Transaction Risk Classification}
+\author{}
+\institute{}
+\maketitle
+
+\begin{abstract}
+Pretrained decision services can return a risk decision without fitting on the target dataset, but their usefulness depends on whether the supplied transaction attributes contain information about the outcome. We compare a hosted Jev decision service with tuned Random Forest and XGBoost classifiers on a simulated accounting-transaction dataset. All systems receive the same 12 leakage-screened features for 2,000 held-out records; the tree models are trained on 8,000 labeled records, whereas Jev receives no dataset-specific training examples. Three post-event columns that perfectly identify the outcome are excluded. On the held-out set (14.5\% positive), ROC-AUC is 0.503 for Random Forest, 0.515 for XGBoost, and 0.492 for Jev. Jev attains 0.700 recall but only 0.141 precision; its Brier score is 0.459, compared with 0.243 and 0.244 for the tree models. Restricting Jev predictions by its reported confidence reduces automatic-decision coverage without improving accuracy among accepted cases at the evaluated thresholds. These results do not establish that one model family is universally preferable. They show that a leakage-aware evaluation of this single simulated dataset yields weak discrimination for all three systems, and that confidence-based deferral cannot be assumed to rescue an uninformative decision signal.
+
+\keywords{Tabular classification \and Financial risk \and Data leakage \and Probability reliability \and Selective prediction}
+\end{abstract}
+
+\section{Introduction}
+
+Transaction risk screening is a structured decision problem: an automated system must make a decision using information available when a transaction is assessed, not fields recorded only after an incident is classified. The distinction matters in a dataset that mixes transaction attributes with incident descriptions. An evaluation that includes the latter can report impressive scores while answering an easier, operationally invalid question. Recent financial-risk benchmarks likewise emphasize the evaluation protocol and leakage control rather than model scores in isolation~\cite{mishra2026erp,zeng2026fraudbench}.
+
+Random Forest and XGBoost are established supervised choices for tabular classification~\cite{breiman2001forests,chen2016xgboost}. Large tabular benchmarks support strong tree baselines but also show that results vary with datasets and tuning~\cite{grinsztajn2022trees,mcelfresh2023tabzilla}. Pretrained models offer another decision mechanism. A tabular foundation model such as TabPFN can exploit labeled in-context examples~\cite{hollmann2025tabpfn}; zero-shot language-model studies investigate predictions without those examples and report mixed behavior~\cite{grushina2026llmtab,garnelo2026tabular}. The hosted Jev system used here returns a structured binary choice and scores from a single transaction state. We do not assume that Jev has the architecture, training procedure, or in-context setting of any of these published systems.
+
+Classification accuracy alone is especially difficult to interpret with a minority risk class: rejecting every case as non-risk can produce high accuracy while missing every incident. Precision--recall analysis addresses this imbalance~\cite{davis2006pr}. A second issue is probability reliability: a ranking metric does not establish that predicted probabilities match event frequencies~\cite{guo2017calibration,haotian2023recal}. A third is whether a separate confidence estimate identifies cases suitable for automatic decisions rather than human review~\cite{singh2026abstention}.
+
+This study asks four questions on one common held-out test set: (RQ1) how do the systems classify risk incidents; (RQ2) how reliable are their positive-class probabilities; (RQ3) does Jev confidence-based deferral improve accepted-case performance; and (RQ4) what latency trade-off accompanies local and hosted inference? The contribution is an empirical, leakage-aware comparison across these dimensions, including a prevalence-only reference classifier. We report the negative result when observable inputs do not support useful discrimination, rather than selecting an outcome threshold or prompt after inspecting the test labels.
+
+\section{Method}
+
+\subsection{Dataset and Feature Availability}
+
+We use version 1 of the Financial Transaction and Risk Management Dataset published by Ziya on Kaggle under CC0~\cite{ziya2025dataset}. Its description says it was designed to \emph{simulate} accounting transactions and risk events. Accordingly, the dataset is a simulation, not evidence of performance in a financial institution. The supplied CSV contains 10,000 rows and 18 columns, including a binary \texttt{Risk\_Incident} label (1,448 positives; 14.48\%). The audit finds no duplicate records, duplicate transaction IDs, or empty CSV values. Transaction dates range from January 2024 to January 2025. The source dataset description does not specify an independently validated incident-label generation rule.
+
+The audit shows that \texttt{Risk\_Type}, \texttt{Incident\_Severity}, and \texttt{Error\_Code} each perfectly separate the binary classes in this file: their non-incident placeholder and incident values encode the target. None enters a classifier or Jev state. We also exclude transaction/account/user identifiers and \texttt{Counterparty} to avoid memorizing high-cardinality identities; \texttt{Currency} is constant. The original \texttt{Date} becomes year, month, day of week, and day of year. The remaining 12 features comprise transaction type, category, payment method, IP region, amount, system latency, login frequency, failed attempts, and these four calendar components. Jev and the supervised baselines use the same feature names and underlying values, although their representations differ. Availability of system latency and behavioral fields at the instant of screening is assumed, not independently established by the dataset publisher. The parser preserves the valid literal \texttt{NA} IP-region code and does not misinterpret the \texttt{None} placeholder in excluded columns as missing data.
+
+\begin{table}[t]
+\caption{Dataset and leakage-aware evaluation protocol. Test counts come from the frozen prediction files.}\label{tab:data}
+\centering\small
+\begin{tabular}{ll}
+\hline
+Dataset / target & Simulated accounting transactions / \texttt{Risk\_Incident} \\
+Rows / positive labels & 10,000 / 1,448 (14.48\%) \\
+Training / test rows & 8,000 / 2,000 (seed 42, stratified) \\
+Positive / negative test labels & 290 / 1,710 \\
+Model inputs & 4 categorical + 8 numeric/derived fields \\
+Target-encoding fields excluded & \texttt{Risk\_Type}, \texttt{Incident\_Severity}, \texttt{Error\_Code} \\
+\hline
+\end{tabular}
+\end{table}
+
+\subsection{Split and Model Configurations}
+
+A single stratified 80/20 split with random seed 42 fixes the held-out test IDs for every method. Supervised preprocessing is fitted inside each training pipeline: median imputation for numeric fields, most-frequent imputation and one-hot encoding for categorical fields, with unseen categories ignored. On the training portion only, five-fold shuffled stratified cross-validation selects hyperparameters by average precision. Random Forest uses balanced class weights; its selected configuration has 200 trees, maximum depth 10, and minimum split size 5. XGBoost uses \texttt{scale\_pos\_weight} equal to the training negative/positive ratio, 0.8 row and column subsampling, histogram tree construction, and a selected 200 trees, depth 3, and learning rate 0.03. Its evaluation metric during fitting is log loss. The chosen parameter values, package versions, and split are recorded in the experiment metadata. A \texttt{DummyClassifier} predicting according to training prevalence supplies a non-discriminating reference. Supervised hard predictions use a fixed positive-probability threshold strictly greater than 0.5; this threshold was not tuned on the test set.
+
+Jev is evaluated as a hosted, task-untrained decision service. For each held-out row, the same 12 feature values are serialized as a named state and submitted with a binary \texttt{Choice} question: ``Classify the transaction in the supplied state. Choose risk\_incident when the available transaction information indicates that this transaction should be flagged as a risk incident; otherwise choose no\_risk\_incident. Use only the supplied state.'' The two choice criteria restate whether the transaction should or should not be flagged. No training labels, exemplars, or excluded incident fields are supplied. The client requested \texttt{jev-latest}; the pilot and saved responses identify the returned model as \texttt{jev-1.13.0} (pilot recorded 25 September 2026). The question version is \texttt{binary-risk-choice-v1}. The chosen option determines Jev's hard prediction. Its \texttt{probabilities["risk\_incident"]} supplies the positive-class probability, while the separately returned \texttt{confidence} field is used only for the deferral analysis. We do not equate that field with the positive-class probability or assert that it is a calibrated probability of correctness. Unlike Random Forest and XGBoost, Jev did not fit on this dataset's training labels; consequently this is a comparison of decision settings, not a controlled comparison of learning algorithms.
+
+\subsection{Measurements and Uncertainty}
+
+We report accuracy, positive-class precision, recall, F1, ROC-AUC, average precision (AP), and Brier score. AP summarizes the precision--recall ranking; its non-informative reference level is approximately the positive prevalence. For labels $y_i\in\{0,1\}$ and predicted positive probabilities $p_i$, the Brier score is $N^{-1}\sum_i(p_i-y_i)^2$ (lower is better). We also inspect ten-quantile-bin reliability plots. Brier score is a proper scoring rule that mixes calibration and refinement; a low score \emph{alone} does not prove useful discrimination or good calibration~\cite{chidambaram2025reassessing}.
+
+For Jev, we retain a prediction when its reported confidence is at least $t\in\{0.50,0.60,0.70,0.80,0.90,0.95\}$. Coverage is the retained fraction of all 2,000 test records; performance is computed \emph{only among retained records}, and the others count as prospective human-review cases. These thresholds describe test-set behavior rather than an independently validated deployment policy. For uncertainty, 1,000 seeded bootstrap resamples of shared held-out IDs provide percentile 95\% intervals for individual metrics and paired model differences; they do not measure variation from a new train/test split or new Jev request. Local model latency is wall-clock time for one row's pipeline \texttt{predict\_proba}; Jev latency is the hosted API round trip, including network effects. Both are summarized by mean, median, and 95th percentile, but are not measurements of identical compute boundaries.
+
+\section{Results}
+
+\subsection{Classification and Probability Scores}
+
+Table~\ref{tab:main} reports the full 2,000-row held-out evaluation. All three non-dummy ROC-AUC values are close to 0.5 and their 95\% bootstrap intervals include 0.5: Random Forest 0.503 [0.466, 0.541], XGBoost 0.515 [0.479, 0.555], and Jev 0.492 [0.456, 0.533]. AP ranges from 0.151 to 0.164, near the 0.145 test prevalence. The paired XGBoost-minus-Jev ROC-AUC interval is [-0.027, 0.071]; the paired F1 interval is [-0.046, 0.012]. Neither supports a clear difference on these two metrics at this sample size. This is not evidence of equivalence.
+
+\begin{table}[t]
+\caption{Held-out classification results ($N=2{,}000$). AP is average precision, not trapezoidal PR area; BS is Brier score (lower is better). The dummy predicts no incident for all rows.}\label{tab:main}
+\centering\scriptsize
+\begin{tabular}{lrrrrrrr}
+\hline
+Model & Accuracy & Precision & Recall & F1 & ROC-AUC & AP & BS$\downarrow$ \\
+\hline
+Prevalence dummy & .855 & .000 & .000 & .000 & .500 & .145 & .124 \\
+Random Forest & .626 & .152 & .345 & .211 & .503 & .152 & .243 \\
+XGBoost & .542 & .145 & .441 & .218 & .515 & .164 & .244 \\
+Jev & .339 & .141 & .700 & .235 & .492 & .151 & .459 \\
+\hline
+\end{tabular}
+\end{table}
+
+The dummy's 0.855 accuracy results from predicting the majority class and missing all 290 incidents. Jev predicts risk for 1,438 of 2,000 transactions (71.9\%): 203 true positives, 1,235 false positives, 87 false negatives, and 475 true negatives. Random Forest yields 100 true positives and 559 false positives; XGBoost yields 128 and 754, respectively. Jev's higher recall and F1 at the fixed operating point therefore coincide with many extra alerts, while its ROC ranking remains near chance. The precision--recall curves in Fig.~\ref{fig:pr} show how precision varies with recall.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{../results/figures/precision_recall_curve.png}
+\caption{Precision--recall curves on the held-out set. The dashed reference is positive prevalence; AP values are reported in Table~\ref{tab:main}. Generated from saved predictions.}\label{fig:pr}
+\end{figure}
+
+On probabilistic scoring, Jev's Brier score is 0.459 versus 0.243 for Random Forest, 0.244 for XGBoost, and 0.124 for the constant-prevalence dummy. The paired Jev-minus-XGBoost Brier difference is 0.215 with a 95\% interval of [0.201, 0.230]. The low dummy Brier score makes the central difficulty visible: predicting the base rate is safer under squared error here than these models' poorly informative probability estimates, although the dummy cannot rank or detect individual incidents. Reliability curves (Fig.~\ref{fig:cal}) provide a complementary view; they are descriptive rather than a standalone proof of calibration.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{../results/figures/calibration_curve.png}
+\caption{Positive-class reliability curves with ten quantile bins per model. The diagonal represents perfect calibration. Points have different mean predicted scores across models; empty bins are omitted by the plotting procedure.}\label{fig:cal}
+\end{figure}
+
+\subsection{Confidence-Based Deferral and Latency}
+
+Table~\ref{tab:selective} shows that increasing the Jev confidence cutoff reduces accepted-case coverage from 63.7\% at 0.50 to 1.65\% at 0.95. At every listed cutoff, accepted-case accuracy (0.272--0.310) is below its unfiltered 0.339 accuracy; thus these thresholds do not yield a monotonic accuracy--coverage improvement. F1 increases at some cutoffs, but class composition changes among accepted records and the number sent for review grows sharply. At 0.90, only 194 cases are retained and 1,806 are deferred; at 0.95, only 33 are retained. These are descriptive comparisons on selected subsets, not estimates of how a staffed review workflow would perform.
+
+\begin{table}[t]
+\caption{Jev selective prediction. Accuracy, precision, recall, and F1 are conditional on accepted cases; review count includes all rejected cases. The unfiltered Jev accuracy/F1 are .339/.235.}\label{tab:selective}
+\centering\scriptsize
+\begin{tabular}{rrrrrrr}
+\hline
+Confidence $t$ & Coverage & Accepted & Review & Accuracy & Precision & Recall / F1 \\
+\hline
+.50 & .637 & 1,274 & 726 & .302 & .134 & .734 / .226 \\
+.60 & .548 & 1,096 & 904 & .308 & .142 & .753 / .239 \\
+.70 & .435 & 869 & 1,131 & .310 & .157 & .779 / .261 \\
+.80 & .286 & 571 & 1,429 & .280 & .141 & .813 / .240 \\
+.90 & .097 & 194 & 1,806 & .299 & .177 & .824 / .292 \\
+.95 & .017 & 33 & 1,967 & .273 & .192 & .625 / .294 \\
+\hline
+\end{tabular}
+\end{table}
+
+For per-record inference, the Random Forest median is 14.8\,ms (p95 14.9\,ms) and the XGBoost median is 1.5\,ms (p95 1.7\,ms). Jev's hosted round-trip median is 264.0\,ms (p95 311.6\,ms). The respective means are 14.6, 1.5, and 270.9\,ms. These values reflect this run and execution environment; the Jev measurement additionally includes service and network time and should not be interpreted as a pure model-compute benchmark.
+
+\section{Discussion}
+
+\subsection{Interpreting the Research Questions}
+
+\textbf{RQ1: classification.} Near-chance ROC-AUC and AP close to prevalence suggest weak ranking signal in the permitted features for this particular split. Jev's high recall follows from flagging most transactions, not from convincing discrimination. The large majority-class accuracy of the dummy shows why an accuracy-only model ranking would misrepresent incident-detection utility. Previous fraud studies using other data and protocols report stronger discrimination~\cite{han2026fusion,fazel2026ebm}; their scores are not directly comparable with a leakage-controlled evaluation of these simulated labels.
+
+\textbf{RQ2: probability reliability.} The Brier scores and reliability plot show that the probabilities from these runs should not be read as dependable individual risk likelihoods. In particular, a constant prevalence predictor beats every evaluated model on Brier score despite detecting no incidents. Calibration and sharpness must be interpreted together; post-hoc recalibration on an independent calibration set is a different experiment and cannot create information absent from the input features~\cite{chidambaram2025reassessing,haotian2023recal}.
+
+\textbf{RQ3: selective decisions.} High reported Jev confidence did not identify a subset with higher accuracy under the evaluated cutoffs. Although some accepted-subset F1 values rise, they are conditional on a changing subset and require deferring most cases at high thresholds. Independent work on abstention emphasizes the need to quantify costs and review capacity rather than treating rejection as a free gain~\cite{singh2026abstention}. A recent evaluation of another commercial System-1 model found confidence utility to be task dependent and sensitive to presentation choices~\cite{provatas2026systemone}; this motivates further testing but supplies no validation for the current Jev confidence field.
+
+\textbf{RQ4: operation.} Jev's observed round trip is much slower than the local XGBoost measurement, while Random Forest's per-row preprocessing/prediction is slower than XGBoost's in this implementation. Different timing boundaries, hardware, API load, network path, and batch sizes limit the generality of these numbers. No cost estimate or production-service guarantee follows from this run.
+
+\subsection{Validity and Scope}
+
+First, the publisher describes the dataset as a simulation, but does not publish a verified real-world outcome mechanism. The perfect target encoding in three incident fields demonstrates why feature availability must be specified. It does \emph{not} establish that the remaining 12 fields carry a usable pre-event signal, nor prove that labels were generated independently of them. Thus we cannot attribute the weak discrimination to any one model architecture. Second, one random stratified split of one dataset does not estimate temporal generalization, robustness to changed prevalence, or variability over data splits. Bootstrap intervals quantify uncertainty conditional on this frozen test set and fixed predictions.
+
+Third, the methods receive unequal supervision: the trees see 8,000 labeled records, while Jev sees one record at a time with no examples. No Jev model card or training-data audit was available to establish what the hosted system may have encountered during pretraining. Its alias can change; the returned version and prompt version are recorded for this run. The question asks whether a row \emph{should} be flagged without an externally validated rule linking its observable fields to the synthetic incident label. More detailed incident criteria cannot be reconstructed from the excluded post-event fields without leakage. Fourth, the Jev hard choice need not coincide with thresholding its reported positive-class probability at 0.5; we respect the returned decision rather than retrofitting a test-set threshold. Selected-case metrics at the six cutoffs have no separate selection dataset and should not be presented as a deployable deferral policy. Human reviewers, error costs, and downstream actions were not measured.
+
+Finally, the tabular foundation model and LLM studies cited above involve different architectures, context regimes, and datasets~\cite{hollmann2025tabpfn,grushina2026llmtab,garnelo2026tabular}. Their mixed evidence motivates careful evaluation, not a transfer of their performance claims to Jev. Likewise, protocol-sensitive risk benchmarking elsewhere~\cite{mishra2026erp,zeng2026fraudbench} reinforces the need to keep leakage control and dataset provenance explicit when interpreting this negative finding.
+
+\section{Conclusion}
+
+On a shared, leakage-aware evaluation of simulated accounting transactions, Jev, Random Forest, and XGBoost all yield ROC-AUC values near chance after target-encoding fields are removed. Jev flags many more cases and attains higher recall, but at low precision and a substantially worse Brier score than the local models; its reported confidence does not improve accepted-case accuracy at the tested cutoffs. These observations bound what can be claimed from the experiment: neither the hosted decision service nor the supervised baselines demonstrate reliable individual incident screening on the permitted features. A useful next study would test independently justified pre-event risk criteria and additional datasets with documented label generation, while fixing prompts, thresholds, and review budgets before examining test labels.
+
+\section*{AI Usage Declaration}
+Generative AI tools were used to assist with coding the experimental pipeline and to paraphrase and improve the language of the manuscript. They also assisted with organizing evidence and preparing an initial manuscript draft and bibliography. The authors reviewed the experimental code and are responsible for verifying the data, results, references, figures, interpretations, and final wording. Generative AI did not generate the research data or experimental figures.
+
+\bibliographystyle{splncs04}
+\bibliography{references}
+
+\end{document}
