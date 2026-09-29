@@ -39,7 +39,7 @@ We use version 1 of the Financial Transaction and Risk Management Dataset publis
 
 Our feature-availability rule retains a predictor only if its value could plausibly be known before or at transaction screening; fields describing a subsequently identified incident or its severity are post-outcome inputs. The audit shows that \texttt{Risk\_Type}, \texttt{Incident\_Severity}, and \texttt{Error\_Code} each perfectly separate the binary classes in this file: their non-incident placeholder and incident values encode the target. None enters a classifier or Jev state. We also exclude transaction/account/user identifiers and \texttt{Counterparty} to avoid memorising high-cardinality identities; \texttt{Currency} is constant. The original \texttt{Date} becomes year, month, day of week, and day of year. The remaining 12 features comprise transaction type, category, payment method, IP region, amount, system latency, login frequency, failed attempts, and these four calendar components. Jev and the supervised baselines use the same feature names and underlying values, although their representations differ. Availability of system latency and behavioural fields at the instant of screening is assumed, not independently established by the dataset publisher. The parser preserves the valid literal \texttt{NA} IP-region code and does not misinterpret the \texttt{None} placeholder in excluded columns as missing data.
 
-\begin{table}[t]
+\begin{table}[h]
 \caption{Dataset and leakage-aware evaluation protocol. Test counts come from the frozen prediction files.}\label{tab:data}
 \centering\small
 \begin{tabular}{ll}
@@ -163,6 +163,9 @@ Finally, the tabular foundation model and LLM studies cited above involve differ
 \section{Conclusion}
 
 On a shared, leakage-aware evaluation of simulated accounting transactions, Jev, Random Forest, and XGBoost all yield ROC-AUC values near chance after target-encoding fields are removed. Jev flags many more cases and attains higher recall, but at low precision and a substantially worse Brier score than the local models; its reported confidence does not improve accepted-case accuracy at the tested cutoffs. These observations bound what can be claimed from the experiment: neither the hosted decision service nor the supervised baselines demonstrate reliable individual incident screening on the permitted features. A useful next study would test independently justified pre-event risk criteria and additional datasets with documented label generation, while fixing prompts, thresholds, and review budgets before examining test labels.
+
+\section*{Code and Data Availability}
+The experiment code, notebooks, and supplied simulated dataset are available at \url{https://github.com/yehezkielgunawan/jev-paper}. The repository documents the evaluation procedure; reproducing hosted Jev inference requires TypeSafe API access.
 
 \section*{AI Usage Declaration}
 ChatGPT and OpenCode were used to assist with experimental code, evidence organisation, an initial manuscript draft, bibliography preparation, and language revision. The authors reviewed the code and take responsibility for verifying the data, results, sources, figures, interpretations, and final wording. Generative AI did not generate the research data or experimental figures.
