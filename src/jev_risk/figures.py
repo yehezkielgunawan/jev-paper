@@ -74,8 +74,9 @@ def create_evaluation_figures(
         if len(np.unique(y_true)) == 2:
             false_positive_rate, true_positive_rate, _ = roc_curve(y_true, probability)
             roc_axis.plot(false_positive_rate, true_positive_rate, label=model.replace("_", " "))
-            precision, recall, _ = precision_recall_curve(y_true, probability)
-            pr_axis.plot(recall, precision, label=model.replace("_", " "))
+            if model != "dummy":
+                precision, recall, _ = precision_recall_curve(y_true, probability)
+                pr_axis.plot(recall, precision, label=model.replace("_", " "))
             bins = min(10, max(2, len(frame) // 2))
             fraction_positive, mean_predicted = calibration_curve(
                 y_true, probability, n_bins=bins, strategy="quantile"
