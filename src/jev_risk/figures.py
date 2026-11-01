@@ -146,3 +146,68 @@ def create_evaluation_figures(
         plt.close(figure)
         written.append("confidence_coverage.png")
     return written
+
+
+def create_revision_figures(
+    thresholds: pd.DataFrame,
+    diagnostics: Mapping[str, pd.DataFrame] | None,
+    output_dir: str | Path,
+) -> list[str]:
+    """Plot exploratory operating points and confidence diagnostics from exported tables."""
+    destination = Path(output_dir)
+    destination.mkdir(parents=True, exist_ok=True)
+    written = []
+    figure, axes = plt.subplots(1, 3, figsize=(12, 3.5), sharex=True)
+    for model, rows in thresholds.groupby("model", sort=False):
+        for axis, metric in zip(axes, ("precision", "recall", "alert_rate"), strict=True):
+            axis.plot(rows["threshold"], rows[metric], marker=".", label=model.replace("_", " "))
+            axis.set(xlabel="Positive-probability threshold", ylabel=metric.replace("_", " ").title(),
+                     ylim=(0, 1.02))
+    axes[0].legend(fontsize="small")
+    figure.tight_layout()
+    figure.savefig(destination / "threshold_sensitivity.png", dpi=160, bbox_inches="tight")
+    plt.close(figure)
+    written.append("threshold_sensitivity.png")
+    if diagnostics is None:
+        return written
+
+    curve = diagnostics["risk_coverage"]
+    selected = diagnostics["confidence_diagnostics"]
+    figure, axis = plt.subplots(figsize=(7, 4.5))
+    axis.fill_between(
+        curve["coverage"], curve["random_risk_reference_lower"],
+        curve["random_risk_reference_upper"], color="gray", alpha=0.2,
+        label="Random acceptance: central 95% reference",
+    )
+    axis.plot(curve["coverage"], curve["random_risk_expected"], "--", color="gray",
+              label="Random acceptance: expected risk")
+    axis.plot(curve["coverage"], curve["selective_risk"], label="Jev confidence selection")
+    # Percentile intervals need not contain the estimate; draw their endpoints directly.
+    axis.vlines(selected["coverage"], selected["selective_risk_ci_lower"],
+                selected["selective_risk_ci_upper"], color="tab:blue", label="Pointwise bootstrap 95% CI")
+    axis.scatter(selected["coverage"], selected["selective_risk"], s=18, color="tab:blue")
+    axis.set(xlabel="Automatic-decision coverage", ylabel="Accepted-case error rate",
+             xlim=(0, 1.02), ylim=(0, 1.02))
+    axis.legend(fontsize="small")
+    figure.tight_layout()
+    figure.savefig(destination / "risk_coverage.png", dpi=160, bbox_inches="tight")
+    plt.close(figure)
+    written.append("risk_coverage.png")
+
+    bins = diagnostics["confidence_bins"]
+    bins = bins.loc[bins["count"] > 0]
+    figure, axis = plt.subplots(figsize=(7, 4.5))
+    for metric, label in (("accuracy", "Accuracy"), ("predicted_positive_rate", "Predicted risk fraction"),
+                          ("positive_prevalence", "Observed incident fraction")):
+        axis.plot(bins["mean_confidence"], bins[metric], marker="o", label=label)
+    for _, row in bins.iterrows():
+        axis.annotate(f"n={int(row['count'])}", (row["mean_confidence"], row["accuracy"]),
+                      xytext=(0, 7), textcoords="offset points", ha="center", fontsize=8)
+    axis.set(xlabel="Mean reported confidence (five equal-width bins)", ylabel="Fraction",
+             xlim=(0, 1.02), ylim=(0, 1.02))
+    axis.legend(fontsize="small")
+    figure.tight_layout()
+    figure.savefig(destination / "confidence_correctness.png", dpi=160, bbox_inches="tight")
+    plt.close(figure)
+    written.append("confidence_correctness.png")
+    return written

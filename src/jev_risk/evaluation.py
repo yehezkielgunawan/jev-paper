@@ -60,6 +60,28 @@ def calculate_metrics(
     }
 
 
+def probability_threshold_metrics(
+    predictions: Mapping[str, pd.DataFrame],
+    thresholds: Sequence[float],
+) -> pd.DataFrame:
+    """Describe fixed probability operating points without replacing saved choices."""
+    if len(predictions) > 1:
+        validate_prediction_comparison(predictions)
+    rows = []
+    for threshold in thresholds:
+        if not np.isfinite(threshold) or not 0 <= threshold <= 1:
+            raise ValueError("Probability threshold must be finite and between 0 and 1")
+        for model, frame in predictions.items():
+            predicted = (frame["y_prob"].to_numpy() > threshold).astype(int)
+            rows.append({
+                "model": model,
+                "threshold": float(threshold),
+                "alert_rate": float(predicted.mean()),
+                **calculate_metrics(frame["y_true"], predicted, frame["y_prob"]),
+            })
+    return pd.DataFrame(rows)
+
+
 def confidence_threshold_metrics(
     predictions: pd.DataFrame,
     thresholds: Sequence[float],

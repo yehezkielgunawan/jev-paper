@@ -16,6 +16,45 @@ from jev_risk.jev import JEV_MODEL, PROMPT_VERSION
 from jev_risk.split import create_split
 
 
+def test_evaluate_exports_revision_analyses_without_requests_or_prediction_changes(tmp_path, monkeypatch):
+    import hashlib
+
+    from jev_risk.predictions import build_prediction_frame, save_predictions
+
+    def forbidden_request(*args, **kwargs):
+        pytest.fail("Offline evaluation must not create an API client")
+
+    monkeypatch.setattr("jev_risk.cli.JevClassifier", forbidden_request)
+    frame = build_prediction_frame(
+        ["a", "b", "c", "d"], [0, 1, 0, 1], [0, 1, 1, 0],
+        [0.1, 0.8, 0.7, 0.3], [1] * 4, confidence=[0.9, 0.9, 0.4, 0.2],
+    )
+    frame["dataset_sha256"] = "dataset"
+    for name in ("dummy", "random_forest", "xgboost", "jev"):
+        save_predictions(frame, tmp_path / "predictions" / f"{name}.csv")
+    metadata = tmp_path / "metadata" / "training_run.json"
+    metadata.parent.mkdir()
+    metadata.write_text(json.dumps({"dataset_sha256": "dataset"}))
+    before = {path.name: path.read_bytes() for path in (tmp_path / "predictions").glob("*.csv")}
+
+    output = run_evaluate(tmp_path, bootstrap_iterations=10)
+
+    for name in ("probability_thresholds", "confidence_diagnostics", "confidence_correctness",
+                 "risk_coverage", "confidence_bins"):
+        assert name in output
+        assert (tmp_path / "metrics" / f"{name}.csv").is_file()
+    assert len(output["probability_thresholds"]) == 4 * 9
+    analysis = json.loads((tmp_path / "metadata" / "offline_analysis.json").read_text())
+    assert analysis["bootstrap_iterations"] == 10
+    assert analysis["random_state"] == 42
+    assert analysis["probability_threshold_rule"] == "y_prob > threshold"
+    for name, data in before.items():
+        assert (tmp_path / "predictions" / name).read_bytes() == data
+        assert analysis["prediction_sha256"][name] == hashlib.sha256(data).hexdigest()
+    for name in ("threshold_sensitivity.png", "risk_coverage.png", "confidence_correctness.png"):
+        assert (tmp_path / "figures" / name).stat().st_size > 0
+
+
 def test_pilot_selection_is_deterministic_and_contains_both_target_classes(sample_transactions):
     first = select_pilot_rows(sample_transactions, sample_size=6, random_state=11)
     second = select_pilot_rows(sample_transactions, sample_size=6, random_state=11)

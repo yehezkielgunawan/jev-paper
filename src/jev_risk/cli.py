@@ -23,6 +23,7 @@ from jev_risk.config import (
     EXCLUDED_FEATURES,
     ID_COLUMN,
     MODEL_FEATURES,
+    PROBABILITY_THRESHOLDS,
     RANDOM_STATE,
     RESULTS_DIR,
     TARGET_COLUMN,
@@ -34,8 +35,9 @@ from jev_risk.evaluation import (
     confidence_threshold_metrics,
     evaluate_models,
     latency_summary,
+    probability_threshold_metrics,
 )
-from jev_risk.figures import create_evaluation_figures
+from jev_risk.figures import create_evaluation_figures, create_revision_figures
 from jev_risk.jev import (
     JEV_MODEL,
     PROMPT_VERSION,
@@ -44,6 +46,7 @@ from jev_risk.jev import (
 )
 from jev_risk.models import fit_classical_models, predict_model
 from jev_risk.predictions import build_prediction_frame, save_predictions
+from jev_risk.selective import selective_diagnostics
 from jev_risk.split import DatasetSplit, create_split, file_sha256, save_split_manifest
 
 
@@ -336,15 +339,47 @@ def run_evaluate(
     latencies.to_csv(metrics_dir / "latency_summary.csv", index=False)
     intervals.to_csv(metrics_dir / "bootstrap_intervals.csv", index=False)
 
+    threshold_results = probability_threshold_metrics(predictions, PROBABILITY_THRESHOLDS)
+    threshold_results.to_csv(metrics_dir / "probability_thresholds.csv", index=False)
+
     confidence_results = None
+    diagnostics = None
     if "jev" in predictions and "confidence" in predictions["jev"]:
         confidence_results = confidence_threshold_metrics(predictions["jev"], CONFIDENCE_THRESHOLDS)
         confidence_results.to_csv(metrics_dir / "confidence_thresholds.csv", index=False)
+        diagnostics = selective_diagnostics(
+            predictions["jev"], CONFIDENCE_THRESHOLDS,
+            iterations=bootstrap_iterations, random_state=RANDOM_STATE,
+        )
+        for name, table in diagnostics.items():
+            table.to_csv(metrics_dir / f"{name}.csv", index=False)
     create_evaluation_figures(predictions, destination / "figures")
+    create_revision_figures(threshold_results, diagnostics, destination / "figures")
+    analysis_metadata = {
+        "analysis_version": "review-revision-v1",
+        "created_at_utc": datetime.now(UTC).isoformat(),
+        "random_state": RANDOM_STATE,
+        "bootstrap_iterations": bootstrap_iterations,
+        "probability_thresholds": list(PROBABILITY_THRESHOLDS),
+        "probability_threshold_rule": "y_prob > threshold",
+        "confidence_thresholds": list(CONFIDENCE_THRESHOLDS),
+        "confidence_threshold_rule": "confidence >= threshold",
+        "random_selection_reference": "uniform without replacement; central 95% range",
+        "random_selection_seed": RANDOM_STATE + 1,
+        "prediction_sha256": {
+            f"{name}.csv": file_sha256(prediction_dir / f"{name}.csv") for name in predictions
+        },
+        "versions": {package: version(package) for package in ("numpy", "pandas", "scikit-learn")},
+    }
+    analysis_path = destination / "metadata" / "offline_analysis.json"
+    analysis_path.parent.mkdir(parents=True, exist_ok=True)
+    analysis_path.write_text(json.dumps(analysis_metadata, indent=2) + "\n", encoding="utf-8")
     return {
         "model_comparison": metrics,
         "latency_summary": latencies,
         "bootstrap_intervals": intervals,
+        "probability_thresholds": threshold_results,
+        **(diagnostics or {}),
         **({"confidence_thresholds": confidence_results} if confidence_results is not None else {}),
     }
 

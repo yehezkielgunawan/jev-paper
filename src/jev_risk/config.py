@@ -14,6 +14,7 @@ TARGET_COLUMN = "Risk_Incident"
 ID_COLUMN = "Transaction_ID"
 BOOTSTRAP_ITERATIONS = 1_000
 CONFIDENCE_THRESHOLDS = (0.50, 0.60, 0.70, 0.80, 0.90, 0.95)
+PROBABILITY_THRESHOLDS = tuple(value / 10 for value in range(1, 10))
 
 EXCLUDED_FEATURES = (
     "Transaction_ID",

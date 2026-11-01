@@ -13,6 +13,33 @@ from jev_risk.evaluation import (
 from jev_risk.predictions import build_prediction_frame
 
 
+def test_probability_threshold_metrics_use_strict_boundary_without_changing_choices():
+    from jev_risk.evaluation import probability_threshold_metrics
+
+    frame = build_prediction_frame(
+        ["a", "b", "c", "d"], [0, 0, 1, 1], [1, 1, 0, 0],
+        [0.0, 0.5, 0.6, 1.0], [1] * 4,
+    )
+    original = frame.copy(deep=True)
+    results = probability_threshold_metrics({"jev": frame}, [0.0, 0.5, 1.0])
+
+    assert results["alert_rate"].tolist() == [0.75, 0.5, 0.0]
+    assert results.loc[1, "accuracy"] == 1
+    assert results.loc[1, "precision"] == 1
+    assert results.loc[1, "recall"] == 1
+    assert results.loc[2, "f1"] == 0
+    assert frame.equals(original)
+
+
+@pytest.mark.parametrize("threshold", [-0.1, 1.1, float("nan")])
+def test_probability_threshold_metrics_reject_invalid_thresholds(threshold):
+    from jev_risk.evaluation import probability_threshold_metrics
+
+    frame = build_prediction_frame(["a"], [0], [0], [0.2], [1])
+    with pytest.raises(ValueError, match="threshold"):
+        probability_threshold_metrics({"model": frame}, [threshold])
+
+
 def test_calculate_metrics_reports_classification_and_probability_scores():
     metrics = calculate_metrics([0, 0, 1, 1], [0, 1, 1, 1], [0.1, 0.7, 0.8, 0.9])
 
