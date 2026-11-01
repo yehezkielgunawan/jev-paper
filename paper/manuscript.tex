@@ -90,7 +90,9 @@ To investigate deferral, we compute ROC-AUC with correctness as the binary targe
 
 \subsection{Reanalysis Artifacts}\label{sec:artifacts}
 
-The implementation is in \path{src/jev_risk/}. Running \texttt{uv run jev-risk} \texttt{evaluate} reads frozen prediction CSVs and exports tables and figures to \path{results/}. Experiment metadata records split IDs, dataset SHA-256, tuning settings, and returned service version. The offline manifest adds prediction-file hashes, analysis version, thresholds, seeds, bootstrap count, and analysis package versions. Reanalysis needs no API credentials; recreating Jev outputs requires service access and availability of the historical model. The source dataset is public, but exact offline reproduction also requires the saved predictions and analysis code.
+The project repository, containing the experimental code and reproducibility instructions, is available at \url{https://github.com/yehezkielgunawan/jev-paper}.
+
+Code is in \path{src/jev_risk/}. Running \texttt{uv run jev-risk} \texttt{evaluate} reads frozen prediction CSVs and exports tables and figures to \path{results/}. Experiment metadata records split IDs, dataset SHA-256, tuning settings, and returned service version. The offline manifest adds prediction-file hashes, analysis version, thresholds, seeds, bootstrap count, and analysis package versions. Reanalysis needs no API credentials; recreating Jev outputs requires service access and availability of the historical model. The source dataset is public, but exact offline reproduction also requires the saved predictions and analysis code.
 
 \section{Results}
 
