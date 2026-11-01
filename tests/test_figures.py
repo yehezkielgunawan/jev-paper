@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from matplotlib.figure import Figure
+
 from jev_risk.figures import create_evaluation_figures
 from jev_risk.predictions import build_prediction_frame
 
@@ -38,3 +40,24 @@ def test_create_evaluation_figures_writes_comparison_plots(tmp_path):
         "calibration_curve.png",
         "confidence_coverage.png",
     }
+
+
+def test_precision_recall_plot_uses_prevalence_line_not_dummy_curve(tmp_path, monkeypatch):
+    truth = [0, 0, 1, 0, 1, 0]
+    sample_ids = [f"id-{index}" for index in range(len(truth))]
+    dummy = build_prediction_frame(sample_ids, truth, [0] * 6, [1 / 3] * 6, [1] * 6)
+    rf = build_prediction_frame(
+        sample_ids, truth, [0, 0, 1, 0, 1, 0], [0.1, 0.2, 0.7, 0.3, 0.8, 0.4], [1] * 6
+    )
+    plotted_labels = []
+    original_savefig = Figure.savefig
+
+    def capture_precision_recall(figure, path, *args, **kwargs):
+        if path.name == "precision_recall_curve.png":
+            plotted_labels.extend(line.get_label() for line in figure.axes[0].lines)
+        return original_savefig(figure, path, *args, **kwargs)
+
+    monkeypatch.setattr(Figure, "savefig", capture_precision_recall)
+    create_evaluation_figures({"dummy": dummy, "random_forest": rf}, tmp_path)
+
+    assert plotted_labels == ["random forest", "Positive prevalence"]
