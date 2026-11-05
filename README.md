@@ -128,6 +128,14 @@ Current [TypeSafe confidence documentation](https://docs.typesafe.ai/confidence)
 
 The question currently asks whether each row *should* be flagged but does not define observable incident criteria. The CSV's incident type, severity, and error code are post-event labels, so they cannot be used to supply those criteria without target leakage. The available pre-event attributes may not explain the labels well enough for any model to generalize. Neither Jev nor the local baselines can infer an unknown label-generation policy from one row's attributes. Do not change the question wording, add leakage fields, or choose a new probability threshold on the held-out test set to improve reported scores. A revised Jev question needs explicit, independently justified risk criteria and a separately versioned experiment; changing the prompt invalidates the cached Jev responses and requires fresh paid inference.
 
+## Paper submission builds
+
+Run `bash scripts/build-paper-tracked.sh` to regenerate the clean revised PDF and
+the separate `paper/manuscript-tracked.tex` / `paper/manuscript-tracked.pdf`.
+See [the tracked-paper build instructions](paper/TRACKED-PAPER.md) for dependencies,
+the verified original baseline, and submission checks. Edit the clean manuscript,
+not the generated tracked source.
+
 ## Repository map
 
 ```text
