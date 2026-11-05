@@ -1,4 +1,4 @@
-% Blinded review manuscript. Compile from paper/ with latexmk -pdf manuscript.tex.
+% Author-identified manuscript. Compile from paper/ with latexmk -pdf manuscript.tex.
 % Numerical results: ../results/metrics/; data audit: ../results/audit/.
 \documentclass{llncs}
 \usepackage{graphicx}
@@ -7,8 +7,12 @@
 
 \title{Leakage-Aware Transaction Risk Classification with Jev and Tree Ensembles}
 \titlerunning{Leakage-Aware Transaction Risk Classification}
-\author{}
-\institute{}
+\author{Yehezkiel Gunawan \and Tanty Oktavia}
+\authorrunning{Y. Gunawan and T. Oktavia}
+\institute{Information Systems Management Department\\
+Binus Graduate Programs -- Master of Information Systems Management\\
+Bina Nusantara University\\
+Jl. K. H. Syahdan No. 9, Kemanggisan, Palmerah, Jakarta 11480, Indonesia}
 \maketitle
 
 \begin{abstract}
@@ -193,6 +197,14 @@ Finally, the tabular foundation model and LLM studies cited above involve differ
 On a shared, leakage-aware evaluation of simulated accounting transactions, Jev, Random Forest, and XGBoost all yield ROC-AUC values near chance after target-encoding fields are removed. Jev flags many more cases and attains higher recall, but at low precision and a substantially worse Brier score than the local models. Offline threshold analysis exposes alert-volume trade-offs, while confidence-error ranking and accepted-subset composition explain why the six evaluated deferral cutoffs do not increase observed accuracy. These observations bound the contribution: none of the evaluated settings demonstrates reliable individual incident screening on the permitted features of this dataset.
 
 \textbf{Future work.} Evaluation should extend to multiple real-world accounting and fraud datasets with documented label provenance and verified pre-event feature availability, using temporal and entity-separated splits where appropriate. Simulation studies should publish their generator and vary signal strength, imbalance, and incident mechanisms rather than treating one synthetic file as representative. Further experiments should define observable risk criteria independently, compare supervision-matched settings, and use separate validation/calibration data to fix prompts, probability thresholds, confidence policies, and review budgets before testing. Repeated splits and service calls would quantify additional variability; cost-sensitive evaluation with actual reviewers would be required to assess an operational deferral workflow.
+
+\section*{Acknowledgements}
+
+\textbf{Funding and conflicts of interest.} This research received no external funding. The authors declare no conflicts of interest.
+
+\textbf{Contributorship.} Yehezkiel Gunawan: conceptualization, formal analysis, investigation, methodology, resources, visualization, writing, and editing. Tanty Oktavia: conceptualization, formal analysis, project administration, validation, and review.
+
+\textbf{Open data.} The authors acknowledge Ziya for making the Financial Transaction and Risk Management Dataset openly available on Kaggle under the CC0 Public Domain license~\cite{ziya2025dataset}. The dataset used in this study is available from its original source at \url{https://www.kaggle.com/datasets/ziya07/financial-transaction-and-risk-management-dataset}.
 
 \section*{AI Usage Declaration}
 Generative AI tools were used to assist with coding the experimental pipeline and to paraphrase and improve the language of the manuscript. They also assisted with organizing evidence and preparing an initial manuscript draft and bibliography. The authors reviewed the experimental code and are responsible for verifying the data, results, references, figures, interpretations, and final wording. Generative AI did not generate the research data or experimental figures.
